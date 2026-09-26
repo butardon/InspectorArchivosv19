@@ -141,6 +141,8 @@ namespace InspectorArchivos.Forms
         // extensión + fecha de modificación + fecha de creación + atributos).
         private bool _dragFilterActive;
         private List<ComparisonRow> _dragFilteredRows = new List<ComparisonRow>();
+        private ComparisonGridQueryService _gridSql;
+
 
         public MainForm(string passwordJsonPath)
         {   
@@ -162,6 +164,9 @@ namespace InspectorArchivos.Forms
 
             _db = Program.OpenDatabase(_passwordJsonPath);
             _repo = new Repository(_db);
+            _gridSql = new ComparisonGridQueryService(_db.Connection);
+            _gridSql.EnsureSchema();
+
             _scanner = new Scanner(_repo);
 
             // Cargar valores por omision desde DefaultsService
@@ -1776,6 +1781,8 @@ namespace InspectorArchivos.Forms
             _dragFilterActive = false;
             _dragFilteredRows = new List<ComparisonRow>();
             _allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
+            _gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);
+
             _originRoots = originScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _destRoots = destScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _chkArchivosOrigen.Checked = true;
@@ -1797,27 +1804,49 @@ namespace InspectorArchivos.Forms
                 return;
             }
 
-            var baseline = _dragFilterActive ? _dragFilteredRows : _allRows;
-            var filtered = baseline.Where(RowPassesFilters).ToList();
-
-            var ordering = BuildOrdering();
-            IOrderedEnumerable<ComparisonRow> ordered = null;
-            foreach (var (col, desc) in ordering)
+            if (_dragFilterActive)
             {
-                var cmp = GetComparer(col);
-                if (cmp == null) continue;
-                Comparison<ComparisonRow> c = desc ? (a, b) => cmp(b, a) : cmp;
-                var kc = Comparer<ComparisonRow>.Create(c);
-                ordered = ordered == null ? filtered.OrderBy(r => r, kc) : ordered.ThenBy(r => r, kc);
+                var filtered = _dragFilteredRows.Where(RowPassesFilters).ToList();
+                var ordering = BuildOrdering();
+                IOrderedEnumerable<ComparisonRow> ordered = null;
+                foreach (var (col, desc) in ordering)
+                {
+                    var cmp = GetComparer(col);
+                    if (cmp == null) continue;
+                    Comparison<ComparisonRow> c = desc ? (a, b) => cmp(b, a) : cmp;
+                    var kc = Comparer<ComparisonRow>.Create(c);
+                    ordered = ordered == null ? filtered.OrderBy(r => r, kc) : ordered.ThenBy(r => r, kc);
+                }
+                _view = ordered == null ? filtered : ordered.ToList();
+                _grid.RowCount = _view.Count;
+                _grid.Invalidate();
+                _lblRecordCount.Text = $"Mostrados: {_view.Count:N0} de {_dragFilteredRows.Count:N0} (filtro por arrastre)";
+                UpdateSelectedCount();
+                return;
             }
 
-            _view = ordered == null ? filtered : ordered.ToList();
+            if (_lastOriginScan == null || _lastDestScan == null)
+            {
+                _view = new List<ComparisonRow>();
+                _grid.RowCount = 0;
+                UpdateSelectedCount();
+                return;
+            }
+
+            var textFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in _fltText) textFilters[kv.Key] = kv.Value.Text.Trim();
+            var fromFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in _fltFrom) fromFilters[kv.Key] = kv.Value.Text.Trim();
+            var toFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in _fltTo) toFilters[kv.Key] = kv.Value.Text.Trim();
+
+            _view = _gridSql.Query(_lastOriginScan.Id,_lastDestScan.Id,
+                _chkArchivosOrigen.Checked,_chkArchivosDestino.Checked,
+                textFilters,fromFilters,toFilters,BuildOrdering());
 
             _grid.RowCount = _view.Count;
             _grid.Invalidate();
-            _lblRecordCount.Text = _dragFilterActive
-                ? $"Mostrados: {_view.Count:N0} de {_dragFilteredRows.Count:N0} (filtro por arrastre)"
-                : $"Mostrados: {_view.Count:N0} de {_allRows.Count:N0}";
+            _lblRecordCount.Text = $"Mostrados: {_view.Count:N0} de {_allRows.Count:N0}";
             UpdateSelectedCount();
         }
 

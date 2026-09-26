@@ -1,0 +1,18 @@
+from pathlib import Path
+p=Path('InspectorArchivosv19/Forms/MainForm.cs')
+s=p.read_text(encoding='utf-8')
+needle='private List<ComparisonRow> _dragFilteredRows = new List<ComparisonRow>();'
+assert needle in s
+s=s.replace(needle,needle+'\n        private ComparisonGridQueryService _gridSql;\n',1)
+needle='_repo = new Repository(_db);'
+assert needle in s
+s=s.replace(needle,needle+'\n            _gridSql = new ComparisonGridQueryService(_db.Connection);\n            _gridSql.EnsureSchema();\n',1)
+needle='_allRows = _repo.BuildComparison(originScan.Id, destScan.Id);'
+assert needle in s
+s=s.replace(needle,needle+'\n            _gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);\n',1)
+start=s.index('        private void ApplyFilterAndSort()')
+end=s.index('        private bool RowPassesFilters(',start)
+new_method='''        private void ApplyFilterAndSort()\n        {\n            if (_duplicatesReviewMode)\n            {\n                _view = new List<ComparisonRow>(_duplicateReviewRows);\n                _grid.RowCount = _view.Count;\n                _grid.Invalidate();\n                _lblRecordCount.Text = $"Duplicados mostrados: {_view.Count:N0} (revisión)";\n                UpdateSelectedCount();\n                return;\n            }\n\n            if (_dragFilterActive)\n            {\n                var filtered = _dragFilteredRows.Where(RowPassesFilters).ToList();\n                var ordering = BuildOrdering();\n                IOrderedEnumerable<ComparisonRow> ordered = null;\n                foreach (var (col, desc) in ordering)\n                {\n                    var cmp = GetComparer(col);\n                    if (cmp == null) continue;\n                    Comparison<ComparisonRow> c = desc ? (a, b) => cmp(b, a) : cmp;\n                    var kc = Comparer<ComparisonRow>.Create(c);\n                    ordered = ordered == null ? filtered.OrderBy(r => r, kc) : ordered.ThenBy(r => r, kc);\n                }\n                _view = ordered == null ? filtered : ordered.ToList();\n                _grid.RowCount = _view.Count;\n                _grid.Invalidate();\n                _lblRecordCount.Text = $"Mostrados: {_view.Count:N0} de {_dragFilteredRows.Count:N0} (filtro por arrastre)";\n                UpdateSelectedCount();\n                return;\n            }\n\n            if (_lastOriginScan == null || _lastDestScan == null)\n            {\n                _view = new List<ComparisonRow>();\n                _grid.RowCount = 0;\n                UpdateSelectedCount();\n                return;\n            }\n\n            var textFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);\n            foreach (var kv in _fltText) textFilters[kv.Key] = kv.Value.Text.Trim();\n            var fromFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);\n            foreach (var kv in _fltFrom) fromFilters[kv.Key] = kv.Value.Text.Trim();\n            var toFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);\n            foreach (var kv in _fltTo) toFilters[kv.Key] = kv.Value.Text.Trim();\n\n            _view = _gridSql.Query(_lastOriginScan.Id,_lastDestScan.Id,\n                _chkArchivosOrigen.Checked,_chkArchivosDestino.Checked,\n                textFilters,fromFilters,toFilters,BuildOrdering());\n\n            _grid.RowCount = _view.Count;\n            _grid.Invalidate();\n            _lblRecordCount.Text = $"Mostrados: {_view.Count:N0} de {_allRows.Count:N0}";\n            UpdateSelectedCount();\n        }\n\n'''
+s=s[:start]+new_method+s[end:]
+p.write_text(s,encoding='utf-8')
+print('MainForm.cs actualizado')
