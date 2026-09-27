@@ -145,7 +145,7 @@ namespace InspectorArchivos.Forms
 
 
         public MainForm(string passwordJsonPath)
-        {   
+        {
             _passwordJsonPath = passwordJsonPath;
             Text = exeversion;
             // Ancho inicial ajustado, de nuevo, a la línea de referencia (amarilla)
@@ -164,7 +164,7 @@ namespace InspectorArchivos.Forms
 
             _db = Program.OpenDatabase(_passwordJsonPath);
             _repo = new Repository(_db);
-            _gridSql = new ComparisonGridQueryService(_db.Connection);
+            _gridSql = new ComparisonGridQueryService(_db.ConnectionString);
             _gridSql.EnsureSchema();
 
             _scanner = new Scanner(_repo);
@@ -205,12 +205,12 @@ namespace InspectorArchivos.Forms
             catch { }
             try
             {
-                if (string.IsNullOrEmpty(_txtTrash.Text)) _txtTrash.Text=_settings.CarpetaPapelera;
+                if (string.IsNullOrEmpty(_txtTrash.Text)) _txtTrash.Text = _settings.CarpetaPapelera;
                 if (string.IsNullOrEmpty(_txtTrash.Text)) _txtTrash.Text = Path.Combine(AppContext.BaseDirectory, "Papelera");
             }
             catch { }
 
-            
+
 
             _uiTimer.Interval = 500;
             _uiTimer.Tick += (s, e) =>
@@ -250,7 +250,7 @@ namespace InspectorArchivos.Forms
 
         private void BuildUi()
         {
-            
+
             var foldersPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -264,7 +264,7 @@ namespace InspectorArchivos.Forms
             foldersPanel.ColumnStyles.Add(
                 new ColumnStyle(SizeType.Percent, 50));
 
-           
+
             foldersPanel.Controls.Add(
                 BuildFoldersGroup(
                     "Carpetas de ORIGEN",
@@ -576,7 +576,7 @@ namespace InspectorArchivos.Forms
             _chkArchivosDestino.Checked = false;
             _chkArchivosDestino.Margin = new Padding(3, 7, 0, 0);
             _chkArchivosDestino.CheckedChanged += (s, e) => ApplyFilterAndSort();
-      
+
             var lblProcedencia = new Label
             {
                 Text = "Elección de procedencia",
@@ -1561,10 +1561,10 @@ namespace InspectorArchivos.Forms
             // recupera la lista de carpetas escaneadas a partir de la tabla scans, una lista por tipo de origen/destino, para poder sustituir la información del ListBox de carpetas en caso de que el usuario quiera volver a escanear.
             _originRoots = origins[0].RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             //List<string> lorigin = origins[0].RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-          
+
             //if (lorigin.Count > 0)
             if (_originRoots.Length > 0)
-                {
+            {
                 _originFolders.Items.Clear();
                 //foreach (var f in lorigin)
                 foreach (var f in _originRoots)
@@ -1611,7 +1611,7 @@ namespace InspectorArchivos.Forms
             //    TryBuildComparison(); // comportamiento por defecto: usar los últimos escaneos
             //    Log("Ver último escáner: cargando la comparativa a partir de los últimos escaneos guardados.");
             //}
-            
+
             //TryBuildComparison();
         }
 
@@ -1780,9 +1780,6 @@ namespace InspectorArchivos.Forms
             _lastDestScan = destScan;
             _dragFilterActive = false;
             _dragFilteredRows = new List<ComparisonRow>();
-            // cambio temporal 
-            //_allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
-            _gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);
             var swComparacion = Stopwatch.StartNew();
 
             _allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
@@ -1798,8 +1795,6 @@ namespace InspectorArchivos.Forms
             swCache.Stop();
 
             Log($"PRUEBA RebuildCache: {_allRows.Count:N0} filas en {swCache.Elapsed}.");
-
-            ///// fin cambio temporal
 
             _originRoots = originScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _destRoots = destScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -1851,16 +1846,16 @@ namespace InspectorArchivos.Forms
                 return;
             }
 
-            var textFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            var textFilters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in _fltText) textFilters[kv.Key] = kv.Value.Text.Trim();
-            var fromFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            var fromFilters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in _fltFrom) fromFilters[kv.Key] = kv.Value.Text.Trim();
-            var toFilters = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            var toFilters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in _fltTo) toFilters[kv.Key] = kv.Value.Text.Trim();
 
-            _view = _gridSql.Query(_lastOriginScan.Id,_lastDestScan.Id,
-                _chkArchivosOrigen.Checked,_chkArchivosDestino.Checked,
-                textFilters,fromFilters,toFilters,BuildOrdering());
+            _view = _gridSql.Query(_lastOriginScan.Id, _lastDestScan.Id,
+                _chkArchivosOrigen.Checked, _chkArchivosDestino.Checked,
+                textFilters, fromFilters, toFilters, BuildOrdering());
 
             _grid.RowCount = _view.Count;
             _grid.Invalidate();
@@ -2188,7 +2183,7 @@ namespace InspectorArchivos.Forms
             // Comparador que ordena de forma DESCENDENTE (mayor a menor).
             var fechas = new SortedSet<DateTime>(Comparer<DateTime>.Create((a, b) => b.CompareTo(a)));
             int procesados = 0, errores = 0;
-            
+
             try
             {
                 foreach (var fi in FileEnumerator.Enumerate(roots, CancellationToken.None,
@@ -2204,7 +2199,7 @@ namespace InspectorArchivos.Forms
 
                         DateTime? fechaExif = null; //fecha de toma de la imagen.
                         if (MediaExtensionsService.RestrictToMedia)
-                            fechaExif = DateUtils.TryGetExifDateTaken(fi.FullName.ToString());                        
+                            fechaExif = DateUtils.TryGetExifDateTaken(fi.FullName.ToString());
                         DateTime fecha = DateUtils.GetValidModificationDate(fi.FullName, fi.LastWriteTime, fi.CreationTime, fechaExif, MediaExtensionsService.RestrictToMedia);
                         fechas.Add(fecha.Date);
                         procesados++;

@@ -13,12 +13,30 @@ namespace InspectorArchivos.Database
     /// </summary>
     public sealed class ComparisonGridQueryService
     {
-        private readonly NpgsqlConnection _connection;
-        public ComparisonGridQueryService(NpgsqlConnection connection) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+        // Una conexión Npgsql no admite dos operaciones simultáneas, ni comandos
+        // mientras un COPY está activo. Se guarda solo la cadena: cada operación
+        // obtiene su propia conexión del pool.
+        private readonly string _connectionString;
+        public ComparisonGridQueryService(string connectionString)
+            => _connectionString = !string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString : throw new ArgumentException("La cadena de conexión es obligatoria.", nameof(connectionString));
+
+        private NpgsqlConnection OpenConnection()
+        {
+            var connection = new NpgsqlConnection(_connectionString);
+            connection.Open();
+            return connection;
+        }
 
         public void EnsureSchema()
         {
-            using var cmd = _connection.CreateCommand();
+            using var connection = OpenConnection();
+            EnsureSchema(connection);
+        }
+
+        private static void EnsureSchema(NpgsqlConnection connection)
+        {
+            using var cmd = connection.CreateCommand();
             cmd.CommandTimeout = 0;
             cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS public.comparison_grid_cache (
@@ -73,15 +91,15 @@ CREATE INDEX IF NOT EXISTS ix_cgc_de_path ON public.comparison_grid_cache (origi
 CREATE INDEX IF NOT EXISTS ix_cgc_or_size ON public.comparison_grid_cache (origin_scan_id, destination_scan_id, origin_size, row_id);
 CREATE INDEX IF NOT EXISTS ix_cgc_de_size ON public.comparison_grid_cache (origin_scan_id, destination_scan_id, destination_size, row_id);
 CREATE INDEX IF NOT EXISTS ix_cgc_or_date ON public.comparison_grid_cache (origin_scan_id, destination_scan_id, origin_lastwritetime, row_id);
-CREATE INDEX IF NOT EXISTS ix_cgc_de_date ON public.comparison_grid_cache (origin_scan_id, destination_scan_id, destination_lastwritetime, row_id);
-ANALYZE public.comparison_grid_cache;";
+CREATE INDEX IF NOT EXISTS ix_cgc_de_date ON public.comparison_grid_cache (origin_scan_id, destination_scan_id, destination_lastwritetime, row_id);";
             cmd.ExecuteNonQuery();
         }
 
         public void RebuildCache(long originScanId, long destinationScanId, IList<ComparisonRow> rows)
         {
-            EnsureSchema();
-            using (var del = _connection.CreateCommand())
+            using var connection = OpenConnection();
+            EnsureSchema(connection);
+            using (var del = connection.CreateCommand())
             {
                 del.CommandTimeout = 0;
                 del.CommandText = "DELETE FROM public.comparison_grid_cache WHERE origin_scan_id=@o AND destination_scan_id=@d;";
@@ -90,7 +108,10 @@ ANALYZE public.comparison_grid_cache;";
                 del.ExecuteNonQuery();
             }
 
-            using var importer = _connection.BeginBinaryImport(@"
+            // El bloque using es deliberadamente explícito: Complete() confirma
+            // los datos, pero Dispose() es quien devuelve la conexión al estado
+            // Idle. Ningún comando puede ejecutarse antes de salir del bloque.
+            using (var importer = connection.BeginBinaryImport(@"
 COPY public.comparison_grid_cache
 (origin_scan_id,destination_scan_id,row_id,origin_id,destination_id,has_origin,has_destination,estado,
  origin_fullpath,destination_fullpath,origin_name,destination_name,origin_extension,destination_extension,
@@ -98,34 +119,36 @@ COPY public.comparison_grid_cache
  origin_attributes,destination_attributes,origin_hash,destination_hash,origin_fingerprint,destination_fingerprint,
  origin_nombrepc,destination_nombrepc,origin_revisado,destination_revisado,origin_repetitions,destination_repetitions,
  origin_candidatura,destination_candidatura,nombre,extension,fingerprint,es_duplicado,carpeta_padre_origen,carpeta_padre_destino)
-FROM STDIN (FORMAT BINARY)");
-
-            long id = 0;
-            foreach (var r in rows)
+FROM STDIN (FORMAT BINARY)"))
             {
-                id++;
-                importer.StartRow();
-                importer.Write(originScanId); importer.Write(destinationScanId); importer.Write(id);
-                Write(importer, r.FileIdOrigen); Write(importer, r.FileIdDestino);
-                importer.Write(!string.IsNullOrEmpty(r.RutaOrigen)); importer.Write(!string.IsNullOrEmpty(r.RutaDestino));
-                importer.Write(r.EstadoLabel);
-                Write(importer, r.RutaOrigen); Write(importer, r.RutaDestino);
-                Write(importer, r.Nombre); Write(importer, r.Nombre);
-                Write(importer, r.Extension); Write(importer, r.Extension);
-                Write(importer, r.TamanoOrigen); Write(importer, r.TamanoDestino);
-                Write(importer, r.FechaCreacionOrigen?.ToString("O", CultureInfo.InvariantCulture)); Write(importer, r.FechaCreacionDestino?.ToString("O", CultureInfo.InvariantCulture));
-                Write(importer, r.FechaModOrigen?.ToString("O", CultureInfo.InvariantCulture)); Write(importer, r.FechaModDestino?.ToString("O", CultureInfo.InvariantCulture));
-                Write(importer, r.AtributosOrigen.HasValue ? (long)r.AtributosOrigen.Value : (long?)null); Write(importer, r.AtributosDestino.HasValue ? (long)r.AtributosDestino.Value : (long?)null);
-                Write(importer, r.HashOrigen); Write(importer, r.HashDestino); Write(importer, r.Fingerprint); Write(importer, r.Fingerprint);
-                Write(importer, r.NombrePcOrigen); Write(importer, r.NombrePcDestino); Write(importer, r.RevisadoOrigen); Write(importer, r.RevisadoDestino);
-                importer.Write(r.RepeticionesOrigen); importer.Write(r.RepeticionesDestino);
-                Write(importer, r.Candidatura.HasValue ? (long?)r.Candidatura.Value : null); Write(importer, null as long?);
-                Write(importer, r.Nombre); Write(importer, r.Extension); Write(importer, r.Fingerprint); importer.Write(r.EsDuplicado);
-                Write(importer, Parent(r.RutaOrigen)); Write(importer, Parent(r.RutaDestino));
-            }
-            importer.Complete();
 
-            using var analyze = _connection.CreateCommand();
+                long id = 0;
+                foreach (var r in rows)
+                {
+                    id++;
+                    importer.StartRow();
+                    importer.Write(originScanId); importer.Write(destinationScanId); importer.Write(id);
+                    Write(importer, r.FileIdOrigen); Write(importer, r.FileIdDestino);
+                    importer.Write(!string.IsNullOrEmpty(r.RutaOrigen)); importer.Write(!string.IsNullOrEmpty(r.RutaDestino));
+                    importer.Write(r.EstadoLabel);
+                    Write(importer, r.RutaOrigen); Write(importer, r.RutaDestino);
+                    Write(importer, r.Nombre); Write(importer, r.Nombre);
+                    Write(importer, r.Extension); Write(importer, r.Extension);
+                    Write(importer, r.TamanoOrigen); Write(importer, r.TamanoDestino);
+                    Write(importer, r.FechaCreacionOrigen?.ToString("O", CultureInfo.InvariantCulture)); Write(importer, r.FechaCreacionDestino?.ToString("O", CultureInfo.InvariantCulture));
+                    Write(importer, r.FechaModOrigen?.ToString("O", CultureInfo.InvariantCulture)); Write(importer, r.FechaModDestino?.ToString("O", CultureInfo.InvariantCulture));
+                    Write(importer, r.AtributosOrigen.HasValue ? (long)r.AtributosOrigen.Value : (long?)null); Write(importer, r.AtributosDestino.HasValue ? (long)r.AtributosDestino.Value : (long?)null);
+                    Write(importer, r.HashOrigen); Write(importer, r.HashDestino); Write(importer, r.Fingerprint); Write(importer, r.Fingerprint);
+                    Write(importer, r.NombrePcOrigen); Write(importer, r.NombrePcDestino); Write(importer, r.RevisadoOrigen); Write(importer, r.RevisadoDestino);
+                    importer.Write(r.RepeticionesOrigen); importer.Write(r.RepeticionesDestino);
+                    Write(importer, r.Candidatura.HasValue ? (long?)r.Candidatura.Value : null); Write(importer, null as long?);
+                    Write(importer, r.Nombre); Write(importer, r.Extension); Write(importer, r.Fingerprint); importer.Write(r.EsDuplicado);
+                    Write(importer, Parent(r.RutaOrigen)); Write(importer, Parent(r.RutaDestino));
+                }
+                importer.Complete();
+            }
+
+            using var analyze = connection.CreateCommand();
             analyze.CommandTimeout = 0;
             analyze.CommandText = "ANALYZE public.comparison_grid_cache;";
             analyze.ExecuteNonQuery();
@@ -172,7 +195,8 @@ FROM STDIN (FORMAT BINARY)");
             foreach (var kv in toFilters) AddRange(where, parameters, kv.Key, kv.Value, false, ref n);
 
             string order = BuildOrder(ordering);
-            using var cmd = _connection.CreateCommand(); cmd.CommandTimeout = 0;
+            using var connection = OpenConnection();
+            using var cmd = connection.CreateCommand(); cmd.CommandTimeout = 0;
             cmd.CommandText = $@"SELECT c.row_id,c.origin_id,c.destination_id,c.has_origin,c.has_destination,c.estado,
  c.origin_fullpath,c.destination_fullpath,c.origin_name,c.origin_extension,c.origin_size,c.origin_creationtime,c.origin_lastwritetime,c.origin_attributes,c.origin_hash,c.origin_fingerprint,c.origin_nombrepc,c.origin_revisado,c.origin_repetitions,
  c.destination_fullpath,c.destination_name,c.destination_extension,c.destination_size,c.destination_creationtime,c.destination_lastwritetime,c.destination_attributes,c.destination_hash,c.destination_fingerprint,c.destination_nombrepc,c.destination_revisado,c.destination_repetitions,

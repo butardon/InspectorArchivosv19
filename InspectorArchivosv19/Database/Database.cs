@@ -19,6 +19,7 @@ namespace InspectorArchivos.Database
         private const int ConnectionTimeout = 15;
         private const int CommandTimeout = 60;
 
+        private readonly string _connectionString;
         private readonly NpgsqlConnection _connection;
 
         public Database(string passwordJsonPath)
@@ -36,11 +37,20 @@ namespace InspectorArchivos.Database
                 CommandTimeout = CommandTimeout
             };
 
-            _connection = new NpgsqlConnection(builder.ConnectionString);
+            // Se conserva la cadena original con la contraseña leída del JSON.
+            // Npgsql puede ocultarla en Connection.ConnectionString después de Open().
+            _connectionString = builder.ConnectionString;
+            _connection = new NpgsqlConnection(_connectionString);
             _connection.Open();
         }
 
         public NpgsqlConnection Connection => _connection;
+
+        /// <summary>
+        /// Cadena original para servicios que deben abrir una conexión distinta del pool.
+        /// No usar Connection.ConnectionString para este fin: Npgsql puede ocultar Password.
+        /// </summary>
+        public string ConnectionString => _connectionString;
 
         private static string LoadPassword(string jsonPath)
         {
@@ -56,7 +66,7 @@ namespace InspectorArchivos.Database
             if (!document.RootElement.TryGetProperty("password", out JsonElement passwordElement))
                 throw new InvalidOperationException($"El archivo JSON '{jsonPath}' no contiene la propiedad 'password'.");
 
-            string  ? password = passwordElement.GetString();
+            string? password = passwordElement.GetString();
             if (string.IsNullOrEmpty(password))
                 throw new InvalidOperationException($"La propiedad 'password' del archivo '{jsonPath}' está vacía.");
 
