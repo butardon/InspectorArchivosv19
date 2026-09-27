@@ -60,8 +60,8 @@ namespace InspectorArchivosv19.Views
                 _statusFilter
             );
 
-            dataGridViewComparison.DataSource = null;
-            dataGridViewComparison.DataSource = _currentPageRows;
+            dgvComparison.DataSource = null;
+            dgvComparison.DataSource = _currentPageRows;
 
             UpdatePaginationControls();
         }
@@ -116,11 +116,11 @@ namespace InspectorArchivosv19.Views
             }
         }
 
-        private async void dataGridViewComparison_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+        private async void dgvComparison_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
         {
-            if (e.ColumnIndex >= 0 && e.ColumnIndex < dataGridViewComparison.Columns.Count)
+            if (e.ColumnIndex >= 0 && e.ColumnIndex < dgvComparison.Columns.Count)
             {
-                string newSortColumn = dataGridViewComparison.Columns[e.ColumnIndex].DataPropertyName;
+                string newSortColumn = dgvComparison.Columns[e.ColumnIndex].DataPropertyName;
                 if (string.Equals(_sortColumn, newSortColumn, StringComparison.OrdinalIgnoreCase))
                 {
                     _sortAscending = !_sortAscending;
@@ -140,7 +140,7 @@ namespace InspectorArchivosv19.Views
             if (selectedOnly)
             {
                 var selectedRows = new List<ComparisonRow>();
-                foreach (DataGridViewRow row in dataGridViewComparison.SelectedRows)
+                foreach (DataGridViewRow row in dgvComparison.SelectedRows)
                 {
                     if (row.DataBoundItem is ComparisonRow compRow)
                     {

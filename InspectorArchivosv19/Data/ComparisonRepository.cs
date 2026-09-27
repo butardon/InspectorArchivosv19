@@ -1,12 +1,11 @@
-﻿using InspectorArchivos.Models;
-using InspectorArchivosv19.Models;
-using Npgsql;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Npgsql;
+using InspectorArchivosv19.Models;
 
 namespace InspectorArchivosv19.Data
 {
@@ -19,10 +18,6 @@ namespace InspectorArchivosv19.Data
             _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
         }
 
-        /// <summary>
-        /// Comprueba si ya existe una caché calculada y válida para la pareja de escaneos (origen vs destino).
-        /// Evita recalcular de nuevo si no han cambiado.
-        /// </summary>
         public async Task<bool> IsCacheValidAsync(long originScanId, long destinationScanId, CancellationToken ct = default)
         {
             const string sql = @"
@@ -47,10 +42,6 @@ namespace InspectorArchivosv19.Data
             }
         }
 
-        /// <summary>
-        /// Reconstruye la caché directamente dentro de PostgreSQL mediante la sentencia INSERT INTO ... SELECT.
-        /// Evita la transferencia de objetos C# por red y la inserción masiva vía COPY.
-        /// </summary>
         public async Task<long> PopulateCacheInDatabaseAsync(long originScanId, long destinationScanId, CancellationToken ct = default)
         {
             using (var conn = new NpgsqlConnection(_connectionString))
@@ -58,7 +49,6 @@ namespace InspectorArchivosv19.Data
                 await conn.OpenAsync(ct);
                 using (var tx = await conn.BeginTransactionAsync(ct))
                 {
-                    // 1. Eliminar datos obsoletos de esta combinación
                     const string deleteSql = @"
                         DELETE FROM comparison_grid_cache 
                         WHERE origin_scan_id = @originScanId 
@@ -71,7 +61,6 @@ namespace InspectorArchivosv19.Data
                         await deleteCmd.ExecuteNonQueryAsync(ct);
                     }
 
-                    // 2. Insertar directamente reutilizando la lógica del calculador SQL
                     const string insertSql = @"
                         INSERT INTO comparison_grid_cache (
                             origin_scan_id, destination_scan_id, row_id,
@@ -111,7 +100,6 @@ namespace InspectorArchivosv19.Data
 
                     await tx.CommitAsync(ct);
 
-                    // 3. Optimizar el planificador con ANALYZE
                     using (var analyzeCmd = new NpgsqlCommand("ANALYZE comparison_grid_cache;", conn))
                     {
                         await analyzeCmd.ExecuteNonQueryAsync(ct);
@@ -122,9 +110,6 @@ namespace InspectorArchivosv19.Data
             }
         }
 
-        /// <summary>
-        /// Obtiene el total de filas filtradas registradas en la caché.
-        /// </summary>
         public async Task<int> GetTotalCountAsync(
             long originScanId,
             long destinationScanId,
@@ -168,9 +153,6 @@ namespace InspectorArchivosv19.Data
             }
         }
 
-        /// <summary>
-        /// Carga una página específica desde PostgreSQL con LIMIT/OFFSET.
-        /// </summary>
         public async Task<List<ComparisonRow>> GetPagedRowsAsync(
             long originScanId,
             long destinationScanId,
@@ -242,12 +224,15 @@ namespace InspectorArchivosv19.Data
                     {
                         while (await reader.ReadAsync(ct))
                         {
+                            string rawStatus = reader.GetString(3);
+                            Enum.TryParse(rawStatus, true, out FileState parsedState);
+
                             rows.Add(new ComparisonRow
                             {
                                 RowId = reader.GetInt64(0),
                                 RelPath = reader.GetString(1),
                                 Filename = reader.IsDBNull(2) ? null : reader.GetString(2),
-                                StatusCode = reader.GetString(3),
+                                State = parsedState,
                                 OriginSize = reader.IsDBNull(4) ? (long?)null : reader.GetInt64(4),
                                 DestSize = reader.IsDBNull(5) ? (long?)null : reader.GetInt64(5),
                                 OriginMtime = reader.IsDBNull(6) ? (DateTime?)null : reader.GetDateTime(6),
