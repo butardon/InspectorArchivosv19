@@ -1780,8 +1780,26 @@ namespace InspectorArchivos.Forms
             _lastDestScan = destScan;
             _dragFilterActive = false;
             _dragFilteredRows = new List<ComparisonRow>();
-            _allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
+            // cambio temporal 
+            //_allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
             _gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);
+            var swComparacion = Stopwatch.StartNew();
+
+            _allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
+
+            swComparacion.Stop();
+
+            Log($"PRUEBA BuildComparison: {_allRows.Count:N0} filas en {swComparacion.Elapsed}.");
+
+            var swCache = System.Diagnostics.Stopwatch.StartNew();
+
+            _gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);
+
+            swCache.Stop();
+
+            Log($"PRUEBA RebuildCache: {_allRows.Count:N0} filas en {swCache.Elapsed}.");
+
+            ///// fin cambio temporal
 
             _originRoots = originScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _destRoots = destScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

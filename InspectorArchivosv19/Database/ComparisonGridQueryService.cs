@@ -176,7 +176,7 @@ FROM STDIN (FORMAT BINARY)");
             cmd.CommandText = $@"SELECT c.row_id,c.origin_id,c.destination_id,c.has_origin,c.has_destination,c.estado,
  c.origin_fullpath,c.destination_fullpath,c.origin_name,c.origin_extension,c.origin_size,c.origin_creationtime,c.origin_lastwritetime,c.origin_attributes,c.origin_hash,c.origin_fingerprint,c.origin_nombrepc,c.origin_revisado,c.origin_repetitions,
  c.destination_fullpath,c.destination_name,c.destination_extension,c.destination_size,c.destination_creationtime,c.destination_lastwritetime,c.destination_attributes,c.destination_hash,c.destination_fingerprint,c.destination_nombrepc,c.destination_revisado,c.destination_repetitions,
- c.nombre,c.extension,c.fingerprint,c.es_duplicado,c.candidatura_origen,c.carpeta_padre_origen,c.carpeta_padre_destino
+ c.nombre,c.extension,c.fingerprint,c.es_duplicado,c.origin_candidatura,c.carpeta_padre_origen,c.carpeta_padre_destino
 FROM public.comparison_grid_cache c WHERE {string.Join(" AND ", where)} ORDER BY {order}, c.row_id;";
             foreach (var p in parameters) cmd.Parameters.AddWithValue(p.Item1, p.Item2 ?? DBNull.Value);
             using var r = cmd.ExecuteReader();
@@ -226,7 +226,7 @@ FROM public.comparison_grid_cache c WHERE {string.Join(" AND ", where)} ORDER BY
         private static ComparisonRow Read(NpgsqlDataReader r)
         {
             var x = new ComparisonRow { FileIdOrigen = L(r, 1), FileIdDestino = L(r, 2), Estado = ParseState(S(r, 5)), RutaOrigen = S(r, 6), RutaDestino = S(r, 19), Nombre = S(r, 31), Extension = S(r, 32), TamanoOrigen = L(r, 10), TamanoDestino = L(r, 22), FechaCreacionOrigen = D(r, 11), FechaCreacionDestino = D(r, 23), FechaModOrigen = D(r, 12), FechaModDestino = D(r, 24), HashOrigen = S(r, 14), HashDestino = S(r, 26), Fingerprint = S(r, 33), NombrePcOrigen = S(r, 16), NombrePcDestino = S(r, 28), RevisadoOrigen = S(r, 17), RevisadoDestino = S(r, 29), RepeticionesOrigen = Convert.ToInt32(r.GetValue(18)), RepeticionesDestino = Convert.ToInt32(r.GetValue(30)), Candidatura = L(r, 35).HasValue ? (int?)L(r, 35).Value : null, AtributosOrigen = L(r, 13).HasValue ? (System.IO.FileAttributes?)L(r, 13).Value : null, AtributosDestino = L(r, 25).HasValue ? (System.IO.FileAttributes?)L(r, 25).Value : null, CarpetaPadreOrigen = S(r, 36), CarpetaPadreDestino = S(r, 37) };
-            x.Hash = x.HashOrigen ?? x.HashDestino; x.NombrePc = x.NombrePcOrigen ?? x.NombrePcDestino; x.EsDuplicado = r.GetBoolean(35); return x;
+            x.Hash = x.HashOrigen ?? x.HashDestino; x.NombrePc = x.NombrePcOrigen ?? x.NombrePcDestino; x.EsDuplicado = r.GetBoolean(34); return x;
         }
         private static FileState ParseState(string s) => Enum.TryParse<FileState>(s, out var v) ? v : FileState.Desconocido;
     }
