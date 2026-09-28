@@ -134,6 +134,8 @@ namespace InspectorArchivos.Forms
         private bool _duplicatesReviewMode;
         private List<ComparisonRow> _duplicateReviewRows = new List<ComparisonRow>();
 
+        private int _selectedCount = 0;
+
         // Modo filtro por arrastrar y soltar: al soltar archivos/carpetas del
         // explorador sobre la cuadrícula comparativa, se filtra _allRows a las
         // filas cuyo lado (origen o destino) coincide exactamente con alguno de
@@ -1742,6 +1744,7 @@ namespace InspectorArchivos.Forms
         //}
         private void TryBuildComparison(int? originId = null, int? destinationId = null)
         {
+            _selectedCount = 0;
             if (_duplicatesReviewMode)
             {
                 _duplicatesReviewMode = false;
@@ -2007,7 +2010,8 @@ namespace InspectorArchivos.Forms
 
         private void Grid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs e)
         {
-            if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
+            //if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
+            if (e.RowIndex < 0 || _virtualSource == null || e.RowIndex >= _virtualSource.TotalCount) return;
             //var row = _view[e.RowIndex];
             var row = _virtualSource?.GetRow(e.RowIndex);
             if (row == null) return;
@@ -2033,8 +2037,12 @@ namespace InspectorArchivos.Forms
 
         private void Grid_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
         {
-            if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
-            var back = GetRowBackColor(_view[e.RowIndex]);
+            //if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
+            //var back = GetRowBackColor(_view[e.RowIndex]);
+            if (e.RowIndex < 0 || _virtualSource == null) return;
+            var row = _virtualSource.GetRow(e.RowIndex);
+            if (row == null) return;
+            var back = GetRowBackColor(row);
             if (back.HasValue)
             {
                 e.CellStyle.BackColor = back.Value;
@@ -2087,10 +2095,20 @@ namespace InspectorArchivos.Forms
 
         private void Grid_CellValuePushed(object sender, DataGridViewCellValueEventArgs e)
         {
-            if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
+            //if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
+            //if (_grid.Columns[e.ColumnIndex].Name == "Sel")
+            //{
+            //    _view[e.RowIndex].Selected = e.Value is bool b ? b : Convert.ToBoolean(e.Value);
+            if (e.RowIndex < 0 || _virtualSource == null) return;
             if (_grid.Columns[e.ColumnIndex].Name == "Sel")
             {
-                _view[e.RowIndex].Selected = e.Value is bool b ? b : Convert.ToBoolean(e.Value);
+                var row = _virtualSource.GetRow(e.RowIndex);
+                if (row == null) return;
+                row.Selected = e.Value is bool b ? b : Convert.ToBoolean(e.Value);
+                if (row.Selected)
+                    _selectedCount++;
+                else
+                    _selectedCount--;
                 UpdateSelectedCount();
             }
         }
@@ -2153,7 +2171,11 @@ namespace InspectorArchivos.Forms
         private void Grid_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-            string val = GetCellValue(_view[e.RowIndex], _grid.Columns[e.ColumnIndex].Name);
+            //string val = GetCellValue(_view[e.RowIndex], _grid.Columns[e.ColumnIndex].Name);
+            var row = _virtualSource?.GetRow(e.RowIndex);
+            if (row == null) return;
+            string val = GetCellValue(row, _grid.Columns[e.ColumnIndex].Name);
+
             if (!string.IsNullOrEmpty(val))
             {
                 Clipboard.SetText(val);
@@ -2164,7 +2186,11 @@ namespace InspectorArchivos.Forms
         private void CopyCurrentCellValue()
         {
             if (_grid.CurrentCell == null) return;
-            string val = GetCellValue(_view[_grid.CurrentCell.RowIndex], _grid.Columns[_grid.CurrentCell.ColumnIndex].Name);
+            //string val = GetCellValue(_view[_grid.CurrentCell.RowIndex], _grid.Columns[_grid.CurrentCell.ColumnIndex].Name);
+            var row = _virtualSource?.GetRow(_grid.CurrentCell.RowIndex);
+            if (row == null) return;
+            string val = GetCellValue(row, _grid.Columns[_grid.CurrentCell.ColumnIndex].Name);
+
             if (!string.IsNullOrEmpty(val))
             {
                 Clipboard.SetText(val);
@@ -2267,21 +2293,36 @@ namespace InspectorArchivos.Forms
             UpdateSelectedCount();
         }
 
+        //private void SyncSelAllCheck()
+        //{
+        //    bool any = _view.Count > 0;
+        //    bool all = any && _view.All(r => r.Selected);
+
+        //    _chkSelAll.CheckedChanged -= ChkSelAll_CheckedChanged;
+        //    _chkSelAll.Checked = all;
+        //    _chkSelAll.Enabled = any;
+        //    _chkSelAll.CheckedChanged += ChkSelAll_CheckedChanged;
+        //}
+
         private void SyncSelAllCheck()
         {
-            bool any = _view.Count > 0;
-            bool all = any && _view.All(r => r.Selected);
-
+            bool any = _virtualSource != null && _virtualSource.TotalCount > 0;
             _chkSelAll.CheckedChanged -= ChkSelAll_CheckedChanged;
-            _chkSelAll.Checked = all;
+            _chkSelAll.Checked = false;
             _chkSelAll.Enabled = any;
             _chkSelAll.CheckedChanged += ChkSelAll_CheckedChanged;
         }
 
+        //private void UpdateSelectedCount()
+        //{
+        //    int n = _view.Count(r => r.Selected);
+        //    _lblSelectedCount.Text = $"Seleccionados: {n:N0}";
+        //    SyncSelAllCheck();
+        //}
+
         private void UpdateSelectedCount()
         {
-            int n = _view.Count(r => r.Selected);
-            _lblSelectedCount.Text = $"Seleccionados: {n:N0}";
+            _lblSelectedCount.Text = $"Seleccionados: {_selectedCount:N0}";
             SyncSelAllCheck();
         }
 
