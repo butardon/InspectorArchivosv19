@@ -17,7 +17,6 @@ using DocumentFormat.OpenXml.Presentation;
 using InspectorArchivos.Database;
 using InspectorArchivos.Forms;
 using InspectorArchivos.Models;
-using InspectorArchivos.Models;
 using InspectorArchivos.Services;
 using InspectorArchivos.Utils;
 
@@ -126,6 +125,7 @@ namespace InspectorArchivos.Forms
         // Datos
         private List<ComparisonRow> _allRows = new List<ComparisonRow>();
         private List<ComparisonRow> _view = new List<ComparisonRow>();
+        private VirtualComparisonSource _virtualSource;
         private string[] _originRoots = Array.Empty<string>();
         private string[] _destRoots = Array.Empty<string>();
 
@@ -1857,13 +1857,24 @@ namespace InspectorArchivos.Forms
             var toFilters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in _fltTo) toFilters[kv.Key] = kv.Value.Text.Trim();
 
-            _view = _gridSql.Query(_lastOriginScan.Id, _lastDestScan.Id,
+            //_view = _gridSql.Query(_lastOriginScan.Id, _lastDestScan.Id,
+            //    _chkArchivosOrigen.Checked, _chkArchivosDestino.Checked,
+            //    textFilters, fromFilters, toFilters, BuildOrdering());
+
+            //_grid.RowCount = _view.Count;
+            //_grid.Invalidate();
+            //_lblRecordCount.Text = $"Mostrados: {_view.Count:N0} de {_allRows.Count:N0}";
+
+            // DESPUÉS:
+            _virtualSource = new VirtualComparisonSource(
+                _gridSql, _lastOriginScan.Id, _lastDestScan.Id,
                 _chkArchivosOrigen.Checked, _chkArchivosDestino.Checked,
                 textFilters, fromFilters, toFilters, BuildOrdering());
 
-            _grid.RowCount = _view.Count;
+            _grid.RowCount = _virtualSource.TotalCount;
             _grid.Invalidate();
-            _lblRecordCount.Text = $"Mostrados: {_view.Count:N0} de {_allRows.Count:N0}";
+            _lblRecordCount.Text = $"Mostrados: {_virtualSource.TotalCount:N0} filas";
+
             UpdateSelectedCount();
         }
 
@@ -1997,7 +2008,10 @@ namespace InspectorArchivos.Forms
         private void Grid_CellValueNeeded(object sender, DataGridViewCellValueEventArgs e)
         {
             if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
-            var row = _view[e.RowIndex];
+            //var row = _view[e.RowIndex];
+            var row = _virtualSource?.GetRow(e.RowIndex);
+            if (row == null) return;
+
             if (_grid.Columns[e.ColumnIndex].Name == "Sel")
             {
                 e.Value = row.Selected;
