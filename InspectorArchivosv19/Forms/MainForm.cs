@@ -1780,21 +1780,24 @@ namespace InspectorArchivos.Forms
             _lastDestScan = destScan;
             _dragFilterActive = false;
             _dragFilteredRows = new List<ComparisonRow>();
-            var swComparacion = Stopwatch.StartNew();
+            //var swComparacion = Stopwatch.StartNew();
 
-            _allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
+            //_allRows = _repo.BuildComparison(originScan.Id, destScan.Id);
 
-            swComparacion.Stop();
+            //swComparacion.Stop();
 
-            Log($"PRUEBA BuildComparison: {_allRows.Count:N0} filas en {swComparacion.Elapsed}.");
+            //Log($"PRUEBA BuildComparison: {_allRows.Count:N0} filas en {swComparacion.Elapsed}.");
 
-            var swCache = System.Diagnostics.Stopwatch.StartNew();
+            //var swCache = System.Diagnostics.Stopwatch.StartNew();
 
-            _gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);
+            //_gridSql.RebuildCache(originScan.Id, destScan.Id, _allRows);
 
-            swCache.Stop();
+            //swCache.Stop();
 
-            Log($"PRUEBA RebuildCache: {_allRows.Count:N0} filas en {swCache.Elapsed}.");
+            //Log($"PRUEBA RebuildCache: {_allRows.Count:N0} filas en {swCache.Elapsed}.");
+
+            long rowCount = _gridSql.RebuildCacheDirect(originScan.Id, destScan.Id);
+            
 
             _originRoots = originScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             _destRoots = destScan.RootPaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -1803,7 +1806,8 @@ namespace InspectorArchivos.Forms
             _chkArchivosDestino.Checked = false;
             ApplyFilterAndSort();
             UpdateStatsLabels();
-            Log($"Comparativa lista: {_allRows.Count:N0} filas.");
+            //Log($"Comparativa lista: {_allRows.Count:N0} filas.");
+            Log($"Comparativa lista: {rowCount:N0} filas.");
         }
         private void ApplyFilterAndSort()
         {

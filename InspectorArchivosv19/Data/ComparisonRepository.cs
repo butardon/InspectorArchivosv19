@@ -1,13 +1,12 @@
-﻿using System;
+﻿using InspectorArchivos.Models;
+using Npgsql;
+using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Npgsql;
-using InspectorArchivosv19.Models;
 
-namespace InspectorArchivosv19.Data
+namespace InspectorArchivos.Data
 {
     public class ComparisonRepository
     {
@@ -61,6 +60,9 @@ namespace InspectorArchivosv19.Data
                         await deleteCmd.ExecuteNonQueryAsync(ct);
                     }
 
+                    // Inserta usando FULL OUTER JOIN sobre scan_files.
+                    // Los valores de estado usan los mismos nombres que el enum FileState
+                    // (Igual, Diferente, SoloOrigen, SoloDestino, etc.).
                     const string insertSql = @"
                         INSERT INTO comparison_grid_cache (
                             origin_scan_id, destination_scan_id, row_id,
@@ -74,10 +76,10 @@ namespace InspectorArchivosv19.Data
                             COALESCE(o.rel_path, d.rel_path) AS rel_path,
                             COALESCE(o.filename, d.filename) AS filename,
                             CASE 
-                                WHEN o.file_id IS NOT NULL AND d.file_id IS NOT NULL AND o.blake3_hash = d.blake3_hash THEN 'IDENTICAL'
-                                WHEN o.file_id IS NOT NULL AND d.file_id IS NOT NULL AND o.blake3_hash <> d.blake3_hash THEN 'DIFFERENT'
-                                WHEN o.file_id IS NOT NULL AND d.file_id IS NULL THEN 'ONLY_ORIGIN'
-                                ELSE 'ONLY_DEST'
+                                WHEN o.file_id IS NOT NULL AND d.file_id IS NOT NULL AND o.blake3_hash = d.blake3_hash THEN 'Igual'
+                                WHEN o.file_id IS NOT NULL AND d.file_id IS NOT NULL AND o.blake3_hash <> d.blake3_hash THEN 'MismoHashDistintoNombre'
+                                WHEN o.file_id IS NOT NULL AND d.file_id IS NULL THEN 'SoloOrigen'
+                                ELSE 'SoloDestino'
                             END AS status_code,
                             o.file_size AS origin_size,
                             d.file_size AS dest_size,
@@ -230,15 +232,15 @@ namespace InspectorArchivosv19.Data
                             rows.Add(new ComparisonRow
                             {
                                 RowId = reader.GetInt64(0),
-                                RelPath = reader.GetString(1),
+                                RelPath = reader.IsDBNull(1) ? null : reader.GetString(1),
                                 Filename = reader.IsDBNull(2) ? null : reader.GetString(2),
-                                State = parsedState,
-                                OriginSize = reader.IsDBNull(4) ? (long?)null : reader.GetInt64(4),
-                                DestSize = reader.IsDBNull(5) ? (long?)null : reader.GetInt64(5),
-                                OriginMtime = reader.IsDBNull(6) ? (DateTime?)null : reader.GetDateTime(6),
-                                DestMtime = reader.IsDBNull(7) ? (DateTime?)null : reader.GetDateTime(7),
-                                OriginHash = reader.IsDBNull(8) ? null : reader.GetString(8),
-                                DestHash = reader.IsDBNull(9) ? null : reader.GetString(9)
+                                Estado = parsedState,
+                                TamanoOrigen = reader.IsDBNull(4) ? (long?)null : reader.GetInt64(4),
+                                TamanoDestino = reader.IsDBNull(5) ? (long?)null : reader.GetInt64(5),
+                                FechaModOrigen = reader.IsDBNull(6) ? (DateTime?)null : reader.GetDateTime(6),
+                                FechaModDestino = reader.IsDBNull(7) ? (DateTime?)null : reader.GetDateTime(7),
+                                HashOrigen = reader.IsDBNull(8) ? null : reader.GetString(8),
+                                HashDestino = reader.IsDBNull(9) ? null : reader.GetString(9)
                             });
                         }
                     }

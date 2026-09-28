@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using InspectorArchivosv19.Data;
-using InspectorArchivosv19.Models;
+using InspectorArchivos.Data;
+using InspectorArchivos.Models;
 
-namespace InspectorArchivosv19.Views
+namespace InspectorArchivos.Views
 {
     public partial class ComparisonGridView : UserControl
     {
