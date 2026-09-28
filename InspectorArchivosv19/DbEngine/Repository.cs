@@ -6,7 +6,7 @@ using Npgsql;
 using NpgsqlTypes;
 using InspectorArchivos.Models;
 
-namespace InspectorArchivos.Database
+namespace InspectorArchivos.DbEngine    
 {
     /// <summary>
     /// Acceso a datos: inserción de escaneos y archivos, consultas comparativas y
